@@ -36,8 +36,6 @@ class FlareonCharacter extends Character
 		curCharacter = character;
 		healthIcon = 'flareon-pixel';
 		healthColorArray = [247, 123, 62];
-		positionArray = [0, 300];
-		cameraPosition = [0, 0];
 		singDuration = 4;
 		noAntialiasing = true;
 		antialiasing = false;
