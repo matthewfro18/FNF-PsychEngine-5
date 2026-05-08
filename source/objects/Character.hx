@@ -99,7 +99,24 @@ class Character extends FlxSprite
 				playAnim("shoot1");
 			case 'pico-blazin', 'darnell-blazin':
 				skipDance = true;
-		}
+			case 'flareon':
+				healthIcon = 'flareon-pixel';
+				healthColorArray = [247, 123, 62];
+				singDuration = 4;
+				noAntialiasing = true;
+				antialiasing = false;
+				hasMissAnimations = true;
+			case 'none', 'nothing', 'empty', 'invisible':
+				visible = false;
+				healthIcon = 'face';
+				healthColorArray = [255, 255, 255];
+				singDuration = 4;
+				noAntialiasing = false;
+				antialiasing = false;
+				hasMissAnimations = false;
+				positionArray = [0, -100];
+				cameraPosition = [0, 0];
+			}
 	}
 
 	public function changeCharacter(character:String)
@@ -308,6 +325,7 @@ class Character extends FlxSprite
 		return !isAnimateAtlas ? (animation.curAnim == null) : (atlas.anim.curInstance == null || atlas.anim.curSymbol == null);
 	}
 
+	@:allow(objects.FlareonCharacter)
 	var _lastPlayedAnimation:String;
 	inline public function getAnimationName():String
 	{
