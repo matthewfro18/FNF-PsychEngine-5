@@ -4,6 +4,14 @@ package objects;
 import flixel.addons.display.FlxRuntimeShader;
 #end
 
+#if sys
+import openfl.display.BitmapData;
+import openfl.display.PNGEncoderOptions;
+import openfl.geom.ColorTransform;
+import openfl.geom.Matrix;
+import openfl.geom.Rectangle;
+#end
+
 class FlareonCharacter extends Character
 {
 	static inline final MOUTH_OFFSET_X:Float = 130;
@@ -286,6 +294,189 @@ class FlareonCharacter extends Character
 		for (spr in [tail, body, head])
 			spr.color = colorValue;
 	}
+
+	#if sys
+	public function makeSpritesheet(?outputFolder:String = 'example_mods/images', ?sheetName:String = 'flareon-generated', framePadding:Int = 24, columns:Int = 4):Bool
+	{
+		if (columns < 1)
+			columns = 1;
+
+		var frames:Array<Dynamic> = [];
+		addSheetFrames(frames, 'idle', 0.8, 8);
+		addSheetFrames(frames, 'hey', HEY_POSE_DURATION, 6);
+		for (anim in ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'])
+		{
+			addSheetFrames(frames, anim, SING_POSE_DURATION, 4);
+			addSheetFrames(frames, anim + '-loop', 0.35, 6);
+			addSheetFrames(frames, anim + 'miss', SING_POSE_DURATION, 4);
+		}
+		addSheetFrames(frames, 'pre-attack', ACTION_POSE_DURATION, 6);
+		addSheetFrames(frames, 'attack', ACTION_POSE_DURATION, 6);
+		addSheetFrames(frames, 'dodge', ACTION_POSE_DURATION, 6);
+		addSheetFrames(frames, 'hurt', HIT_POSE_DURATION, 6);
+		addSheetFrames(frames, 'hit', HIT_POSE_DURATION, 6);
+		addSheetFrames(frames, 'scared', 0.5, 8);
+
+		var oldX:Float = x;
+		var oldY:Float = y;
+		var oldTime:Float = time;
+		var oldSingPoseTime:Float = singPoseTime;
+		var oldAnim:String = currentAnim;
+		var oldMouthOpen:Bool = mouthIsOpen;
+		var oldPartColor:FlxColor = body.color;
+
+		x = 0;
+		y = 0;
+
+		var minX:Float = Math.POSITIVE_INFINITY;
+		var minY:Float = Math.POSITIVE_INFINITY;
+		var maxX:Float = Math.NEGATIVE_INFINITY;
+		var maxY:Float = Math.NEGATIVE_INFINITY;
+
+		for (frame in frames)
+		{
+			poseForSheetFrame(frame.anim, frame.time);
+			var bounds = getSheetBounds();
+			minX = Math.min(minX, bounds.x);
+			minY = Math.min(minY, bounds.y);
+			maxX = Math.max(maxX, bounds.right);
+			maxY = Math.max(maxY, bounds.bottom);
+		}
+
+		var frameWidth:Int = Std.int(Math.ceil(maxX - minX)) + framePadding * 2;
+		var frameHeight:Int = Std.int(Math.ceil(maxY - minY)) + framePadding * 2;
+		var rows:Int = Std.int(Math.ceil(frames.length / columns));
+		var sheet = new BitmapData(frameWidth * columns, frameHeight * rows, true, 0x00000000);
+		var xml = new StringBuf();
+		xml.add('<?xml version="1.0" encoding="utf-8"?>\n');
+		xml.add('<TextureAtlas imagePath="${sheetName}.png">\n');
+
+		for (i in 0...frames.length)
+		{
+			var frame = frames[i];
+			poseForSheetFrame(frame.anim, frame.time);
+			var cellX:Int = (i % columns) * frameWidth;
+			var cellY:Int = Std.int(i / columns) * frameHeight;
+			var drawX:Float = cellX - minX + framePadding;
+			var drawY:Float = cellY - minY + framePadding;
+
+			drawSheetPart(sheet, tail, drawX, drawY);
+			drawSheetPart(sheet, body, drawX, drawY);
+			drawSheetPart(sheet, head, drawX, drawY);
+			if (mouthIsOpen)
+				drawSheetPart(sheet, mouth, drawX, drawY);
+
+			xml.add('\t<SubTexture name="${frame.name}" x="${cellX}" y="${cellY}" width="${frameWidth}" height="${frameHeight}" frameX="0" frameY="0" frameWidth="${frameWidth}" frameHeight="${frameHeight}"/>\n');
+		}
+
+		xml.add('</TextureAtlas>');
+
+		if (!FileSystem.exists(outputFolder))
+			FileSystem.createDirectory(outputFolder);
+
+		File.saveBytes('$outputFolder/$sheetName.png', sheet.encode(sheet.rect, new PNGEncoderOptions()));
+		File.saveContent('$outputFolder/$sheetName.xml', xml.toString());
+		sheet.dispose();
+
+		x = oldX;
+		y = oldY;
+		time = oldTime;
+		singPoseTime = oldSingPoseTime;
+		currentAnim = oldAnim;
+		mouthIsOpen = oldMouthOpen;
+		setPartsColor(oldPartColor);
+		poseForSheetFrame(currentAnim, singPoseTime);
+		return true;
+	}
+
+	function addSheetFrames(frames:Array<Dynamic>, anim:String, duration:Float, frameCount:Int)
+	{
+		for (i in 0...frameCount)
+		{
+			var suffix:String = StringTools.lpad(Std.string(i), '0', 4);
+			frames.push({
+				anim: anim,
+				name: '${anim}${suffix}',
+				time: duration * (i / Math.max(frameCount - 1, 1))
+			});
+		}
+	}
+
+	function poseForSheetFrame(anim:String, poseTime:Float)
+	{
+		currentAnim = anim;
+		singPoseTime = poseTime;
+		time = poseTime;
+		setPartsColor(anim.endsWith('miss') ? 0xFF00A0FF : color);
+
+		if (isIdleAnim(anim))
+			applyIdle(0);
+		else
+			applyPose(anim);
+
+		updateMouth();
+	}
+
+	function getSheetBounds():Rectangle
+	{
+		var bounds = new Rectangle(Math.POSITIVE_INFINITY, Math.POSITIVE_INFINITY, 0, 0);
+		includeSheetPartBounds(bounds, tail);
+		includeSheetPartBounds(bounds, body);
+		includeSheetPartBounds(bounds, head);
+		if (mouthIsOpen)
+			includeSheetPartBounds(bounds, mouth);
+		return bounds;
+	}
+
+	function includeSheetPartBounds(bounds:Rectangle, spr:FlxSprite)
+	{
+		var source = spr.pixels;
+		if (source == null)
+			return;
+
+		var matrix = getSheetPartMatrix(spr, 0, 0);
+		for (point in [{x: 0.0, y: 0.0}, {x: source.width, y: 0.0}, {x: source.width, y: source.height}, {x: 0.0, y: source.height}])
+		{
+			var px:Float = matrix.a * point.x + matrix.c * point.y + matrix.tx;
+			var py:Float = matrix.b * point.x + matrix.d * point.y + matrix.ty;
+			if (px < bounds.x)
+				bounds.x = px;
+			if (py < bounds.y)
+				bounds.y = py;
+			if (px > bounds.right)
+				bounds.width = px - bounds.x;
+			if (py > bounds.bottom)
+				bounds.height = py - bounds.y;
+		}
+	}
+
+	function drawSheetPart(sheet:BitmapData, spr:FlxSprite, offsetX:Float, offsetY:Float)
+	{
+		var source = spr.pixels;
+		if (source == null || !spr.visible || spr.alpha <= 0)
+			return;
+
+		var colorValue:Int = spr.color;
+		var transform = new ColorTransform(
+			((colorValue >> 16) & 0xFF) / 255,
+			((colorValue >> 8) & 0xFF) / 255,
+			(colorValue & 0xFF) / 255,
+			spr.alpha
+		);
+		sheet.draw(source, getSheetPartMatrix(spr, offsetX, offsetY), transform, null, null, false);
+	}
+
+	function getSheetPartMatrix(spr:FlxSprite, offsetX:Float, offsetY:Float):Matrix
+	{
+		var matrix = new Matrix();
+		var scaleX:Float = spr.scale.x * (spr.flipX ? -1 : 1);
+		matrix.translate(-spr.origin.x, -spr.origin.y);
+		matrix.scale(scaleX, spr.scale.y);
+		matrix.rotate(spr.angle * Math.PI / 180);
+		matrix.translate(offsetX + spr.x + spr.origin.x, offsetY + spr.y + spr.origin.y);
+		return matrix;
+	}
+	#end
 
 	function copyPartValues(spr:FlxSprite, partVisible:Bool = true)
 	{
