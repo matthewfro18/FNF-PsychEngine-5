@@ -12,6 +12,7 @@ import openfl.utils.Assets;
 
 import objects.Character;
 import objects.CharacterFactory;
+import objects.FlareonCharacter;
 import objects.HealthIcon;
 import objects.Bar;
 
@@ -672,6 +673,9 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		var saveCharacterButton:PsychUIButton = new PsychUIButton(reloadImage.x, noAntialiasingCheckBox.y + 40, "Save Character", function() {
 			saveCharacter();
 		});
+		var makeFlareonSheetButton:PsychUIButton = new PsychUIButton(reloadImage.x, saveCharacterButton.y + 25, "Make Sheet", function() {
+			makeFlareonSpritesheet();
+		}, 110);
 
 		healthColorStepperR = new PsychUINumericStepper(singDurationStepper.x, saveCharacterButton.y, 20, character.healthColorArray[0], 0, 255, 0);
 		healthColorStepperG = new PsychUINumericStepper(singDurationStepper.x + 65, saveCharacterButton.y, 20, character.healthColorArray[1], 0, 255, 0);
@@ -702,6 +706,42 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab_group.add(healthColorStepperG);
 		tab_group.add(healthColorStepperB);
 		tab_group.add(saveCharacterButton);
+		tab_group.add(makeFlareonSheetButton);
+	}
+
+	function makeFlareonSpritesheet()
+	{
+		#if sys
+		if (!Std.isOfType(character, FlareonCharacter))
+		{
+			FlxG.log.warn('The spritesheet maker is only available for FlareonCharacter.');
+			FlxG.sound.play(Paths.sound('cancelMenu'));
+			return;
+		}
+
+		var outputFolder:String = 'example_mods/images';
+		#if MODS_ALLOWED
+		if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			outputFolder = Paths.mods(Mods.currentModDirectory + '/images');
+		#end
+
+		var sheetName:String = (_char != null && _char.length > 0) ? _char + '-generated' : 'flareon-generated';
+		try
+		{
+			var flareon:FlareonCharacter = cast character;
+			flareon.makeSpritesheet(outputFolder, sheetName);
+			FlxG.log.notice('Saved Flareon spritesheet: $outputFolder/$sheetName.png and $outputFolder/$sheetName.xml');
+			FlxG.sound.play(Paths.sound('confirmMenu'));
+		}
+		catch(e:Dynamic)
+		{
+			FlxG.log.error('Problem making Flareon spritesheet: $e');
+			FlxG.sound.play(Paths.sound('cancelMenu'));
+		}
+		#else
+		FlxG.log.warn('The Flareon spritesheet maker needs a sys/desktop build.');
+		FlxG.sound.play(Paths.sound('cancelMenu'));
+		#end
 	}
 
 	public function UIEvent(id:String, sender:Dynamic) {
