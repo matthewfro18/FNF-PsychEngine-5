@@ -5,11 +5,14 @@ import flixel.addons.display.FlxRuntimeShader;
 #end
 
 #if sys
+import haxe.Json;
 import openfl.display.BitmapData;
 import openfl.display.PNGEncoderOptions;
 import openfl.geom.ColorTransform;
 import openfl.geom.Matrix;
 import openfl.geom.Rectangle;
+import sys.FileSystem;
+import sys.io.File;
 #end
 
 class FlareonCharacter extends Character
@@ -55,7 +58,9 @@ class FlareonCharacter extends Character
 		tail = makePart('tail');
 		body = makePart('torso');
 		head = makePart('head');
-		mouth = makePart('mouth');
+		mouth = new FlxSprite();
+		mouth.makeGraphic(12, 6, 0xFF000000);
+		mouth.antialiasing = false;
 
 		for (anim in [
 			'idle', 'idle-loop', 'hey',
@@ -300,27 +305,15 @@ class FlareonCharacter extends Character
 	}
 
 	#if sys
-	public function makeSpritesheet(?outputFolder:String = 'example_mods/images', ?sheetName:String = 'flareon-generated', framePadding:Int = 24, columns:Int = 8):Bool
+	public function makeSpritesheet(?outputFolder:String = 'example_mods/images', ?sheetName:String = 'flareon-generated', framePadding:Int = 24, columns:Int = 8, ?characterFolder:String):Bool
 	{
 		if (columns < 1)
 			columns = 1;
 
 		var frames:Array<Dynamic> = [];
-		addSheetFrames(frames, 'idle', 0.8, 8);
-		addSheetFrames(frames, 'idle-loop', 0.8, 8);
-		addSheetFrames(frames, 'hey', HEY_POSE_DURATION, 6);
-		for (anim in ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'])
-		{
-			addSheetFrames(frames, anim, SING_POSE_DURATION, 4);
-			addSheetFrames(frames, anim + '-loop', 0.35, 6);
-			addSheetFrames(frames, anim + 'miss', SING_POSE_DURATION, 4);
-		}
-		addSheetFrames(frames, 'pre-attack', ACTION_POSE_DURATION, 6);
-		addSheetFrames(frames, 'attack', ACTION_POSE_DURATION, 6);
-		addSheetFrames(frames, 'dodge', ACTION_POSE_DURATION, 6);
-		addSheetFrames(frames, 'hurt', HIT_POSE_DURATION, 6);
-		addSheetFrames(frames, 'hit', HIT_POSE_DURATION, 6);
-		addSheetFrames(frames, 'scared', 0.5, 8);
+		var exportAnims = getSheetAnimationSpecs();
+		for (anim in exportAnims)
+			addSheetFrames(frames, anim.anim, anim.duration, anim.frames);
 
 		var oldX:Float = x;
 		var oldY:Float = y;
@@ -376,11 +369,16 @@ class FlareonCharacter extends Character
 
 		xml.add('</TextureAtlas>');
 
-		if (!FileSystem.exists(outputFolder))
-			FileSystem.createDirectory(outputFolder);
+		ensureDirectory(outputFolder);
+		if (characterFolder == null)
+			characterFolder = getDefaultCharacterFolder(outputFolder);
+		if (characterFolder != null && characterFolder.length > 0)
+			ensureDirectory(characterFolder);
 
 		File.saveBytes('$outputFolder/$sheetName.png', sheet.encode(sheet.rect, new PNGEncoderOptions()));
 		File.saveContent('$outputFolder/$sheetName.xml', xml.toString());
+		if (characterFolder != null && characterFolder.length > 0)
+			File.saveContent('$characterFolder/$sheetName.json', Json.stringify(makeCharacterJson(sheetName, outputFolder, exportAnims), null, "\t"));
 		sheet.dispose();
 
 		x = oldX;
@@ -392,6 +390,133 @@ class FlareonCharacter extends Character
 		setPartsColor(oldPartColor);
 		poseForSheetFrame(currentAnim, singPoseTime);
 		return true;
+	}
+
+	function getSheetAnimationSpecs():Array<Dynamic>
+	{
+		var ordered:Array<String> = [
+			'idle', 'idle-loop', 'danceLeft', 'danceRight', 'hey',
+			'singLEFT', 'singDOWN', 'singUP', 'singRIGHT',
+			'singLEFT-loop', 'singDOWN-loop', 'singUP-loop', 'singRIGHT-loop',
+			'singLEFTmiss', 'singDOWNmiss', 'singUPmiss', 'singRIGHTmiss',
+			'pre-attack', 'attack', 'dodge', 'hurt', 'hit', 'scared'
+		];
+		var names:Array<String> = [];
+		for (anim in ordered)
+			if (hasAnimation(anim) && !names.contains(anim))
+				names.push(anim);
+		for (anim in animOffsets.keys())
+			if (!names.contains(anim))
+				names.push(anim);
+
+		return [for (anim in names) {
+			anim: anim,
+			duration: getSheetAnimationDuration(anim),
+			frames: getSheetAnimationFrameCount(anim),
+			loop: isSheetAnimationLooped(anim)
+		}];
+	}
+
+	function getSheetAnimationDuration(anim:String):Float
+	{
+		if (anim.endsWith('-loop'))
+			return 0.35;
+		if (isIdleAnim(anim))
+			return 0.8;
+		if (anim == 'hey')
+			return HEY_POSE_DURATION;
+		if (anim.startsWith('sing'))
+			return SING_POSE_DURATION;
+		if (anim == 'hurt' || anim == 'hit')
+			return HIT_POSE_DURATION;
+		if (anim == 'scared')
+			return 0.5;
+		return ACTION_POSE_DURATION;
+	}
+
+	function getSheetAnimationFrameCount(anim:String):Int
+	{
+		if (isIdleAnim(anim) || anim == 'scared')
+			return 8;
+		if (anim.startsWith('sing') && !anim.endsWith('-loop'))
+			return 4;
+		return 6;
+	}
+
+	function isSheetAnimationLooped(anim:String):Bool
+		return isIdleAnim(anim) || anim.endsWith('-loop') || anim == 'scared';
+
+	function makeCharacterJson(sheetName:String, outputFolder:String, exportAnims:Array<Dynamic>):Dynamic
+	{
+		return {
+			animations: [for (anim in exportAnims) {
+				anim: anim.anim,
+				name: anim.anim,
+				fps: 24,
+				loop: anim.loop,
+				indices: [],
+				offsets: getSheetAnimationOffsets(anim.anim)
+			}],
+			image: getCharacterImagePath(outputFolder, sheetName),
+			scale: jsonScale,
+			sing_duration: singDuration,
+			healthicon: healthIcon,
+			position: positionArray,
+			camera_position: cameraPosition,
+			flip_x: originalFlipX,
+			no_antialiasing: noAntialiasing,
+			healthbar_colors: healthColorArray,
+			vocals_file: vocalsFile,
+			_editor_isPlayer: isPlayer
+		};
+	}
+
+	function getSheetAnimationOffsets(anim:String):Array<Int>
+	{
+		var daOffset = animOffsets.get(anim);
+		if (daOffset == null || daOffset.length < 2)
+			return [0, 0];
+		return [Std.int(daOffset[0]), Std.int(daOffset[1])];
+	}
+
+	function getCharacterImagePath(outputFolder:String, sheetName:String):String
+	{
+		var normalized:String = outputFolder.replace('\\', '/');
+		if (normalized.endsWith('/images'))
+			return sheetName;
+
+		var marker:String = '/images/';
+		var markerIndex:Int = normalized.lastIndexOf(marker);
+		if (markerIndex > -1)
+			return normalized.substr(markerIndex + marker.length) + '/' + sheetName;
+
+		if (normalized.startsWith('images/'))
+			return normalized.substr('images/'.length) + '/' + sheetName;
+		return sheetName;
+	}
+
+	function getDefaultCharacterFolder(outputFolder:String):String
+	{
+		var normalized:String = outputFolder.replace('\\', '/');
+		if (normalized.endsWith('/images'))
+			return normalized.substr(0, normalized.length - '/images'.length) + '/characters';
+
+		var marker:String = '/images/';
+		var markerIndex:Int = normalized.lastIndexOf(marker);
+		if (markerIndex > -1)
+			return normalized.substr(0, markerIndex) + '/characters';
+		return 'example_mods/characters';
+	}
+
+	function ensureDirectory(path:String)
+	{
+		if (path == null || path.length < 1 || FileSystem.exists(path))
+			return;
+
+		var parent:String = haxe.io.Path.directory(path);
+		if (parent != null && parent.length > 0 && parent != path)
+			ensureDirectory(parent);
+		FileSystem.createDirectory(path);
 	}
 
 	function addSheetFrames(frames:Array<Dynamic>, anim:String, duration:Float, frameCount:Int)
