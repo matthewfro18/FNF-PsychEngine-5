@@ -188,7 +188,6 @@ class Note extends FlxSprite {
 			rgbShader.g = arr[1];
 			rgbShader.b = arr[2];
 		}
-		if
 		else {
 			rgbShader.r = 0xFFFF0000;
 			rgbShader.g = 0xFF00FF00;
