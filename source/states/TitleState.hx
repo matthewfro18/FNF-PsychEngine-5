@@ -332,9 +332,10 @@ class TitleState extends MusicBeatState
 
 	override function update(elapsed:Float)
 	{
+     	var checker:FlxBackdrop;
 		var scrollSpeed:Float = 50;
-		bg.x -= scrollSpeed * elapsed;
-		bg.y -= scrollSpeed * elapsed;
+		checker.x -= scrollSpeed * elapsed;
+		checker.y -= scrollSpeed * elapsed;
 
 		if (FlxG.sound.music != null)
 			Conductor.songPosition = FlxG.sound.music.time;
