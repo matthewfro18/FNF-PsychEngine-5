@@ -188,7 +188,7 @@ class TitleState extends MusicBeatState
 		blackScreen.updateHitbox();
 		credGroup.add(blackScreen);
 
-		var checker:FlxBackdrop = new FlxBackdrop(Paths.image('Grid_lmao')); 
+		var checker:FlxBackdrop = new FlxBackdrop(Paths.image('Grid_lmao'), XY, 1, 1); 
         //checker.velocity.set(112, 110); 
 		checker.updateHitbox(); 
 		checker.scrollFactor.set(0, 0); 
@@ -332,6 +332,10 @@ class TitleState extends MusicBeatState
 
 	override function update(elapsed:Float)
 	{
+		var scrollSpeed:Float = 50;
+		bg.x -= scrollSpeed * elapsed;
+		bg.y -= scrollSpeed * elapsed;
+
 		if (FlxG.sound.music != null)
 			Conductor.songPosition = FlxG.sound.music.time;
 		// FlxG.watch.addQuick('amp', FlxG.sound.music.amplitude);
