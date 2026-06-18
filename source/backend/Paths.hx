@@ -159,6 +159,8 @@ class Paths
 			if(FileSystem.exists(modded)) return modded;
 		}
 		#end
+		if(parentfolder == "mobile")
+			return getSharedPath('mobile/$file');
 
 		if (parentfolder != null)
 			return getFolderPath(file, parentfolder);
