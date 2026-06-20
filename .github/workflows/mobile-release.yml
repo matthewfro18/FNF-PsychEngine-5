@@ -7,7 +7,7 @@ permissions:
 
 env:
   PROJECT_NAME: PsychEngine
-  REPO_PATH: matthewfroncek36/FNF-PsychEngine-1
+  REPO_PATH: matthewfro18/FNF-PsychEngine-5
 
 jobs:
   get-commit-hash:
